@@ -57,7 +57,7 @@ def google_sheet(data):
 
 @app.route('/')
 def welcome():
-    return "Welcome to the Appointment Booking App! Please use the '/print-payload' endpoint to submit your booking data."
+    return "Welcome to the Appointment Booking App!."
 
 @app.route('/print-payload', methods=['POST'])
 def print_payload():
