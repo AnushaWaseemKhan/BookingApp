@@ -7,8 +7,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from twilio.base.exceptions import TwilioRestException
 import random
 from datetime import datetime, timedelta
+
 app = Flask(__name__)
 
 # Twilio credentials
@@ -64,8 +66,7 @@ def print_payload():
 
         args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments')
         tool_call_id = payload.get('message', {}).get('toolCalls', [])[0].get('id')
-        
-        
+
         name = args.get('Name')
         email = args.get('Email')
         phone = args.get('Phone') 
@@ -73,16 +74,30 @@ def print_payload():
         date = args.get('Date')
         time = args.get('Time')
 
-        data = [[name, email, phone, purpose, date, time]] 
+        # Save to Google Sheets
+        data = [[name, email, phone, purpose, date, time]]
         google_sheet(data)
+
+        # Send email confirmation
         send_email(name, date, time, email)
 
         # Send WhatsApp confirmation
-        client.messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER,
-            body=f"Hello {name}, your appointment is confirmed for {date} at {time}.",
-            to=f"whatsapp:{phone}"  # Use the phone number here
-        )
+        try:
+            client.messages.create(
+                from_=TWILIO_WHATSAPP_NUMBER,
+                body=f"Hello {name}, your appointment is confirmed for {date} at {time}.",
+                to=f"whatsapp:{phone}"  # Use the phone number here
+            )
+        except TwilioRestException as e:
+            if e.code == 63016:  # Error code for "No WhatsApp account"
+                return jsonify({
+                    'results': [{
+                        'toolCallId': tool_call_id,
+                        'result': "Appointment booked, but the phone number provided does not have WhatsApp."
+                    }]
+                }), 200
+            else:
+                raise  # Re-raise other Twilio exceptions
 
         return jsonify({
             'results': [{
