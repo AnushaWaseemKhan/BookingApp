@@ -10,13 +10,17 @@ from googleapiclient.errors import HttpError
 from twilio.base.exceptions import TwilioRestException
 import random
 from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__)
+load_dotenv()
 
-# Twilio credentials
-ACCOUNT_SID = 'ACadede4393af95b2d50a6df022d73667b'
-AUTH_TOKEN = 'a202e4e7b7d10133fefbbb71221bff4e'
+# Twilio credentials from environment variables
+ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_WHATSAPP_NUMBER = 'whatsapp:+14155238886'
+
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
 # Google Sheets API configuration
