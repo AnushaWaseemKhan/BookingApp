@@ -28,6 +28,37 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SPREADSHEET_ID = "1RLG7-V2z2dsRM7xm6Ydeerogybf4WFsRT5tuG1zEFzw"
 RANGE_NAME = "Sheet1!A2:Z"
 
+import requests
+from flask import Flask, request, jsonify
+from twilio.rest import Client
+from email_send import send_email
+import os
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from twilio.base.exceptions import TwilioRestException
+import random
+from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
+
+app = Flask(__name__)
+load_dotenv()
+
+# Twilio credentials from environment variables
+ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_WHATSAPP_NUMBER = 'whatsapp:+14155238886'
+
+client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+# Google Sheets API configuration
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SPREADSHEET_ID = "1RLG7-V2z2dsRM7xm6Ydeerogybf4WFsRT5tuG1zEFzw"
+RANGE_NAME = "Sheet1!A2:Z"
+
 def google_sheet(data):
     """Appends a new row to the Google Sheet."""
     creds = None
@@ -115,32 +146,45 @@ def print_payload():
 
 @app.route('/dates', methods=['POST'])
 def get_date():
-    """Returns random appointment slots."""
-    payload = request.get_json()
-    if not payload:
-        payload = request.form.to_dict()
-    if not payload:
-        payload = request.data.decode('utf-8')
+    """Fetch available dates from external API."""
+    try:
+        payload = request.get_json()
+        if not payload:
+            payload = request.form.to_dict()
+        if not payload:
+            payload = request.data.decode('utf-8')
 
-    args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments')
-    tool_call_id = payload.get('message', {}).get('toolCalls', [])[0].get('id')
+        args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments')
+        tool_call_id = payload.get('message', {}).get('toolCalls', [])[0].get('id')
 
-    now = datetime.now()
-    end_date = now + timedelta(days=7)
+        # Here, call the external API to fetch available dates from the external server
+        available_dates_url = 'https://bookingapp-nole.onrender.com/dates'
+        headers = {'Content-Type': 'application/json'}
+        
+        # You can pass additional parameters here if necessary
+        response = requests.post(available_dates_url, json=payload, headers=headers)
+        
+        if response.status_code == 200:
+            available_dates = response.json().get('results', [])
+            return jsonify({
+                'results': [{
+                    'toolCallId': tool_call_id,
+                    'result': f"The available dates and time are: {available_dates}"
+                }]
+            }), 200
+        else:
+            return jsonify({
+                'results': [{
+                    'toolCallId': tool_call_id,
+                    'result': "No available dates found."
+                }]
+            }), 400
 
-    random_datetimes = []
-    for _ in range(3):
-        random_hours = random.randint(0, int((end_date - now).total_seconds() // 3600))
-        random_datetime = now + timedelta(hours=random_hours)
-        random_datetime = random_datetime.replace(minute=0, second=0, microsecond=0)
-        random_datetimes.append(random_datetime.strftime("%Y-%m-%d %H:%M"))
-
-    return jsonify({
-        'results': [{
-            'toolCallId': tool_call_id,
-            'result': f"The available dates and time are: {random_datetimes}"
-        }]
-    }), 200
+    except Exception as e:
+        print("Error fetching available dates:", e)
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 5000)))
+
+
