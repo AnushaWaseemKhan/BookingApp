@@ -31,16 +31,27 @@ RANGE_NAME = "Sheet1!A2:Z"
 def google_sheet(data):
     """Appends a new row to the Google Sheet."""
     creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    token_path = "token.json"
+
+    # Load existing credentials or refresh them if expired
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"Error refreshing token: {e}")
+                creds = None
+        
+        # Re-authenticate if refreshing fails or creds are invalid
+        if not creds:
             flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
             creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
+
+        # Save refreshed or newly authenticated credentials
+        with open(token_path, "w") as token:
             token.write(creds.to_json())
 
     try:
