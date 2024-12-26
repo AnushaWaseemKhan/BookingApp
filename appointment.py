@@ -68,58 +68,73 @@ def google_sheet(data):
         print("Data successfully appended to the spreadsheet.")
     except HttpError as err:
         print(f"An error occurred: {err}")
-
+        
 @app.route('/', methods=['POST'])
 def print_payload():
     """Handles appointment booking."""
     try:
-        payload = request.get_json()
+        # Parse the payload
+        payload = request.get_json() or request.form.to_dict() or request.data.decode('utf-8')
         if not payload:
-            payload = request.form.to_dict()
-        if not payload:
-            payload = request.data.decode('utf-8')
+            raise ValueError("Payload is empty or invalid.")
 
-        args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments')
+        # Extract arguments from the payload
+        args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments', {})
         tool_call_id = payload.get('message', {}).get('toolCalls', [])[0].get('id')
 
+        # Extract required details
         name = args.get('Name')
         email = args.get('Email')
-        phone = args.get('Phone') 
+        phone = args.get('Phone')
         purpose = args.get('Purpose')
         date = args.get('Date')
         time = args.get('Time')
 
-        # Save to Google Sheets
-        data = [[name, email, phone, purpose, date, time]]
-        google_sheet(data)
+        # Validate required fields
+        if not all([name, email, phone, purpose, date, time]):
+            raise ValueError("Missing required fields in the payload.")
+
+        # Save data to Google Sheets
+        try:
+            data = [[name, email, phone, purpose, date, time]]
+            google_sheet(data)
+            print("Data successfully appended to Google Sheet.")
+        except Exception as sheet_error:
+            print(f"Error updating Google Sheet: {sheet_error}")
 
         # Send email confirmation
-        send_email(name, date, time, email)
+        try:
+            send_email(name, date, time, email)
+            print("Email successfully sent to", email)
+        except Exception as email_error:
+            print(f"Error sending email: {email_error}")
 
         # Send WhatsApp confirmation
-        try:
-            client.messages.create(
-                from_=TWILIO_WHATSAPP_NUMBER,
-                body=f"Hello {name}, your appointment is confirmed for {date} at {time}.",
-                to=f"whatsapp:{phone}"  # Use the phone number here
-            )
-        except TwilioRestException as e:
-            if e.code == 63016:  # Error code for "No WhatsApp account"
-                return jsonify({
-                    'results': [{
-                        'toolCallId': tool_call_id,
-                        'result': "Appointment booked, but the phone number provided does not have WhatsApp."
-                    }]
-                }), 200
-            else:
-                raise  # Re-raise other Twilio exceptions
+        whatsapp_result = "WhatsApp notification skipped."
+        if phone and phone.strip() and phone.startswith('+'):
+            try:
+                client.messages.create(
+                    from_=TWILIO_WHATSAPP_NUMBER,
+                    body=f"Hello {name}, your appointment is confirmed for {date} at {time}.",
+                    to=f"whatsapp:{phone.strip()}"
+                )
+                whatsapp_result = "WhatsApp notification sent successfully."
+            except TwilioRestException as e:
+                if e.code == 63016:  # Error code for "No WhatsApp account"
+                    whatsapp_result = "Phone number provided does not have WhatsApp."
+                else:
+                    raise  # Re-raise other Twilio exceptions
+        else:
+            whatsapp_result = "Invalid phone number provided for WhatsApp."
 
+        # Construct final response
         return jsonify({
             'results': [{
                 'toolCallId': tool_call_id,
-                'result': "Appointment booked successfully"
+                'result': f"Appointment booked successfully. {whatsapp_result}"
             }]
         }), 200
+
     except Exception as e:
         print("Error processing payload:", e)
         return jsonify({'status': 'error', 'message': str(e)}), 400
