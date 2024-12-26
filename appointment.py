@@ -82,12 +82,12 @@ def print_payload():
         args = payload.get('message', {}).get('toolCalls', [])[0].get('function', {}).get('arguments')
         tool_call_id = payload.get('message', {}).get('toolCalls', [])[0].get('id')
 
-        name = args.get('Name')
-        email = args.get('Email')
-        phone = args.get('Phone') 
-        purpose = args.get('Purpose')
-        date = args.get('Date')
-        time = args.get('Time')
+        name = args.get('name')
+        email = args.get('email')
+        phone = args.get('phone') 
+        purpose = args.get('purpose')
+        date = args.get('date')
+        time = args.get('time')
 
         # Save to Google Sheets
         data = [[name, email, phone, purpose, date, time]]
